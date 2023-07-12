@@ -4,20 +4,43 @@ import (
 	"fmt"
 
 	"github.com/timohahaa/report-maker/internal/models"
+	"github.com/timohahaa/report-maker/internal/repository/JSON/device"
+	"github.com/timohahaa/report-maker/internal/repository/JSON/deviceType"
 	"github.com/timohahaa/report-maker/internal/repository/JSON/site"
 )
 
-type SiteRepository interface {
-	GetAllSites() ([]models.Site, error)
-}
-
-func main() {
-	jsonSiteRepo := site.SiteJSONRepo{}
-	sites, err := jsonSiteRepo.GetAllSites()
+func printS(repo models.SiteRepository) {
+	sites, err := repo.GetAllSites()
 	fmt.Println(err)
 	fmt.Println(len(sites))
 	for _, site := range sites {
 		fmt.Printf("%+v\n\n\n", site)
 	}
+}
 
+func printD(repo models.DeviceRepository) {
+	devs, err := repo.GetAllDevices()
+	fmt.Println(err)
+	fmt.Println(len(devs))
+	for _, dev := range devs {
+		fmt.Printf("%+v\n\n\n", dev)
+	}
+}
+
+func printDT(repo models.DeviceTypeRepository) {
+	dTypes, err := repo.GetAllDeviceTypes()
+	fmt.Println(err)
+	fmt.Println(len(dTypes))
+	for _, dt := range dTypes {
+		fmt.Printf("%+v\n\n\n", dt)
+	}
+}
+
+func main() {
+	siteJSONRepo := &site.SiteJSONRepo{}
+	printS(siteJSONRepo)
+	dTypeJSONRepo := &deviceType.DeviceTypeJSONRepo{}
+	printDT(dTypeJSONRepo)
+	devJSONRepo := device.DeviceJSONRepo{}
+	printD(&devJSONRepo)
 }

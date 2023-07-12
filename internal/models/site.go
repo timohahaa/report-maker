@@ -16,9 +16,14 @@ type SitePage struct {
 // \/\/\/
 
 type Site struct {
-	Id                  int    `json:"id"`
-	Name                string `json:"slug"`
-	Region              Region `json:"region"`
+	Id   int    `json:"id"`
+	Name string `json:"slug"`
+	//note this is enough information to know about a region, and because it is only two fields - nested struct is used
+	Region struct {
+		Id   int    `json:"id"`
+		Name string `json:"slug"`
+	} `json:"region"`
+
 	Facility            string `json:"facility"`
 	Description         string `json:"description"`
 	PhysicalAddress     string `json:"physical_address"`
@@ -31,11 +36,12 @@ type Site struct {
 	VlanCount           int    `json:"vlan_count"`
 }
 
+/*
 type Region struct {
 	Id   int    `json:"id"`
 	Name string `json:"slug"`
 }
-
+*/
 // /\/\/\
 
 //site repo interface
