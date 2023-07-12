@@ -23,6 +23,7 @@ type reportRow []any
 //
 // DeviceModel |  Site  | ActiveCount | ZIPcount | ZIPcoverage | Specifications
 //   string    | string |     int     |    int   |   float64   |     string
+//   A col     | B col  |    C col    |  D col   |    E col    |     F col
 //
 //AciveCount - how many devices are active (in NetBox)
 //ZIPcount - how many spare parts and devices of that type are available at the site (SnipeIT)
@@ -66,7 +67,7 @@ func createReportRows(siteRepo models.SiteRepository, deviceRepo models.DeviceRe
 		return nil, err
 	}
 
-	rows := []reportRow{}
+	rows := []reportRow{{"Модель", "Сайт", "Актив, шт", "ЗИП, шт", "% ЗИП", "Описание"}}
 	for _, site := range sites {
 		//make a map of device models -> their count for a particular site
 		deviceMap := createDeviceMap(&site, devices)
@@ -97,7 +98,13 @@ func CreateReport() error {
 			fmt.Println(err)
 		}
 	}()
-	err = file.SetColWidth("Sheet1", "A", "H", 20)
+	//this is what i call "ЧИСТАЯ АРХИТЕКТУРА"
+	err = file.SetColWidth("Sheet1", "A", "A", 20)
+	err = file.SetColWidth("Sheet1", "B", "B", 15)
+	err = file.SetColWidth("Sheet1", "C", "C", 10)
+	err = file.SetColWidth("Sheet1", "D", "D", 10)
+	err = file.SetColWidth("Sheet1", "E", "E", 10)
+	err = file.SetColWidth("Sheet1", "F", "F", 20)
 	if err != nil {
 		return err
 	}
@@ -107,6 +114,28 @@ func CreateReport() error {
 			return err
 		}
 		file.SetSheetRow("Sheet1", cell, &row)
+	}
+	if err := file.AddChart("Sheet1", "G1", &excelize.Chart{
+		Type: excelize.Pie,
+		Series: []excelize.ChartSeries{
+			{
+				Name:       "placeholder",
+				Categories: "Sheet1!$A$2:$A$10",
+				Values:     "Sheet1!$C$2:$C$10",
+			},
+		},
+		Format: excelize.GraphicOptions{
+			OffsetX: 15,
+			OffsetY: 10,
+		},
+		Title: excelize.ChartTitle{
+			Name: "Количество девайсов на сайте",
+		},
+		PlotArea: excelize.ChartPlotArea{
+			ShowPercent: false,
+		},
+	}); err != nil {
+		return err
 	}
 	if err := file.SaveAs("Report.xlsx"); err != nil {
 		return err
