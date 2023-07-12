@@ -2,28 +2,19 @@ package report
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/timohahaa/report-maker/internal/models"
 	"github.com/timohahaa/report-maker/internal/repository/JSON/asset"
 	"github.com/timohahaa/report-maker/internal/repository/JSON/device"
+	"github.com/timohahaa/report-maker/internal/repository/JSON/site"
 	"github.com/xuri/excelize/v2"
 )
 
-/*
-// reportRow represents a row in an report (Excel spreadsheet)
-// DeviceModel AND Site uniquely identify a row in a sphreadsheet
-// each site has multiple devices, and each device is present in multiple sites
-// so their combo is unique
-type reportRow struct {
-	DeviceModel    string
-	Site           string
-	ActiveCount    int     //how many devices are active
-	ZIPcount       int     //how many spare parts and devices of that type are available at the site
-	ZIPcoverage    float64 // ZIPcount/ActiveCount
-	Specifications string
-}
-*/
+const (
+	ZIPstatus string = "ЗИП"
+)
 
 type reportRow []any
 
@@ -36,27 +27,24 @@ type reportRow []any
 //AciveCount - how many devices are active (in NetBox)
 //ZIPcount - how many spare parts and devices of that type are available at the site (SnipeIT)
 //ZIPcoverage - ZIPcount/ActiveCount
+//of cource, this is not a concrete structure, it might be changed to any way you like
 
-// creates a map of device models present on the site to their count
-func createDeviceMap(site *models.Site, deviceRepo models.DeviceRepository) (map[string]int, error) {
+// creates a map of device models present on the site, mapped to their count
+func createDeviceMap(site *models.Site, devices []models.Device) map[string]int {
 	devMap := make(map[string]int)
-	devices, err := deviceRepo.GetAllDevices()
-	if err != nil {
-		return nil, err
-	}
 	for _, device := range devices {
 		if device.Site.Id == site.Id {
 			devMap[device.DeviceType.Model] += 1
 		}
 	}
-	return devMap, nil
+	return devMap
 }
 
 // counts how many devices of a certain model are present in a ZIP of a certain site
 func countZIPdevices(site *models.Site, deviceModel string, assets []models.Asset) int {
 	ZIPcount := 0
 	for _, asset := range assets {
-		if asset.Location == site.Facility && strings.ToLower(asset.Model) == deviceModel {
+		if asset.Location == site.Facility && strings.ToLower(asset.Model) == deviceModel && asset.Status == ZIPstatus {
 			ZIPcount++
 		}
 	}
@@ -64,61 +52,55 @@ func countZIPdevices(site *models.Site, deviceModel string, assets []models.Asse
 }
 
 // creates an array of ready to be inserted report rows for a particular site
-func createReportRows(site *models.Site) ([]reportRow, error) {
-	deviceRepo := &device.DeviceJSONRepo{}
-	devMap, err := createDeviceMap(site, deviceRepo)
+func createReportRows(siteRepo models.SiteRepository, deviceRepo models.DeviceRepository, assetRepo models.AssetRepository) ([]reportRow, error) {
+	sites, err := siteRepo.GetAllSites()
 	if err != nil {
 		return nil, err
 	}
-	rows := []reportRow{}
-	assetRepo := &asset.AssetJSONRepo{}
+	devices, err := deviceRepo.GetAllDevices()
+	if err != nil {
+		return nil, err
+	}
 	assets, err := assetRepo.GetAllAssets()
 	if err != nil {
 		return nil, err
 	}
-	for devModel, activeCount := range devMap {
-		ZIPcount := countZIPdevices(site, devModel, assets)
-		if err != nil {
-			continue
+
+	rows := []reportRow{}
+	for _, site := range sites {
+		//make a map of device models -> their count for a particular site
+		deviceMap := createDeviceMap(&site, devices)
+		//for each device model find its count in a ZIP for a particular site
+		//then append a row to rows slice
+		for model, modelCount := range deviceMap {
+			ZIPcount := countZIPdevices(&site, model, assets)
+			ZIPcoverage := strconv.FormatFloat(float64(ZIPcount)/float64(modelCount), 'f', -1, 64) + "%"
+			row := []any{model, site.Facility, modelCount, ZIPcount, ZIPcoverage, "specs"}
+			rows = append(rows, row)
 		}
-		row := []interface{}{
-			devModel,
-			site.Facility + " " + site.Name,
-			activeCount, ZIPcount,
-			float64(ZIPcount) / float64(activeCount),
-			"потом тут обязательно будут спецификации",
-		}
-		rows = append(rows, row)
 	}
 	return rows, nil
 }
 
-func CreateReport(siteRepo models.SiteRepository) error {
+func CreateReport() error {
+	siteRepo := &site.SiteJSONRepo{}
+	deviceRepo := &device.DeviceJSONRepo{}
+	assetRepo := &asset.AssetJSONRepo{}
+
+	rows, err := createReportRows(siteRepo, deviceRepo, assetRepo)
+	if err != nil {
+		return err
+	}
 	file := excelize.NewFile()
 	defer func() {
 		if err := file.Close(); err != nil {
 			fmt.Println(err)
 		}
 	}()
-	err := file.SetColWidth("Sheet1", "A", "H", 20)
+	err = file.SetColWidth("Sheet1", "A", "H", 20)
 	if err != nil {
 		return err
 	}
-
-	sites, err := siteRepo.GetAllSites()
-	if err != nil {
-		return err
-	}
-
-	rows := []reportRow{}
-	for _, site := range sites {
-		siteRows, err := createReportRows(&site)
-		if err != nil {
-			return err
-		}
-		rows = append(rows, siteRows...)
-	}
-
 	for idx, row := range rows {
 		cell, err := excelize.CoordinatesToCellName(1, idx+1)
 		if err != nil {
