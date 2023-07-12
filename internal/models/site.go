@@ -12,9 +12,6 @@ type SitePage struct {
 	Results  []Site `json:"results"`
 }
 
-//all of the necessary structs to unmarshal the site object
-// \/\/\/
-
 type Site struct {
 	Id   int    `json:"id"`
 	Name string `json:"slug"`
@@ -35,14 +32,6 @@ type Site struct {
 	VirtualMachineCount int    `json:"virtualmachine_count"`
 	VlanCount           int    `json:"vlan_count"`
 }
-
-/*
-type Region struct {
-	Id   int    `json:"id"`
-	Name string `json:"slug"`
-}
-*/
-// /\/\/\
 
 //site repo interface
 

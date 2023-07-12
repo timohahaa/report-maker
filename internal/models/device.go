@@ -12,9 +12,6 @@ type DevicePage struct {
 	Results  []Device `json:"results"`
 }
 
-//all of the necessary structs to unmarshal the site object
-// \/\/\/
-
 type Device struct {
 	Id   int    `json:"id"`
 	Name string `json:"name"`
@@ -32,8 +29,6 @@ type Device struct {
 		Name string `json:"slug"`
 	}
 }
-
-// /\/\/\
 
 //site repo interface
 
