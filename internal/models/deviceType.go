@@ -14,7 +14,7 @@ type DeviceTypePage struct {
 
 type DeviceType struct {
 	Id          int    `json:"id"`
-	Model       string `json:"slug"`
+	ModelName   string `json:"slug"`
 	UnitHeight  int    `json:"u_height"`
 	IsFullDepth bool   `json:"is_full_depth"`
 	DeviceCount int    `json:"device_count"`

@@ -4,9 +4,7 @@ import (
 	"fmt"
 
 	"github.com/timohahaa/report-maker/internal/models"
-	"github.com/timohahaa/report-maker/internal/repository/JSON/asset"
-	"github.com/timohahaa/report-maker/internal/repository/JSON/device"
-	"github.com/timohahaa/report-maker/internal/repository/JSON/deviceType"
+	"github.com/timohahaa/report-maker/internal/report"
 	"github.com/timohahaa/report-maker/internal/repository/JSON/site"
 )
 
@@ -48,11 +46,6 @@ func printDT(repo models.DeviceTypeRepository) {
 
 func main() {
 	siteJSONRepo := &site.SiteJSONRepo{}
-	printS(siteJSONRepo)
-	dTypeJSONRepo := &deviceType.DeviceTypeJSONRepo{}
-	printDT(dTypeJSONRepo)
-	devJSONRepo := &device.DeviceJSONRepo{}
-	printD(devJSONRepo)
-	assetJSONRepo := &asset.AssetJSONRepo{}
-	printA(assetJSONRepo)
+	err := report.CreateReport(siteJSONRepo)
+	fmt.Println(err)
 }
