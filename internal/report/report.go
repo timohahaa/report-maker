@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -13,10 +14,19 @@ import (
 )
 
 const (
-	ZIPstatus string = "ЗИП"
+	ZIPstatus                     string = "ЗИП"
+	minimumZIPcount                      = 1
+	criticalZIPCoveragePercentage        = 0.3
 )
 
 type reportRow []any
+
+type row struct {
+	sphreadsheetRow reportRow
+	//indicates if ZIP count is too low and a cell in a sphreadsheet should be marked as red
+	//check const criticalZIPCoveragePercentage
+	hasCritialZIPcount bool
+}
 
 //excelize works with interface arrays for writing data to rows
 //here is how a single row of a report will look like:
@@ -57,7 +67,7 @@ func retrieveZIPdevices(site *models.Site, deviceModel string, assets []models.A
 }
 
 // creates an array of ready to be inserted report rows for a particular site
-func createReportRows(siteRepo models.SiteRepository, deviceRepo models.DeviceRepository, assetRepo models.AssetRepository) ([]reportRow, error) {
+func createReportRows(siteRepo models.SiteRepository, deviceRepo models.DeviceRepository, assetRepo models.AssetRepository) ([]row, error) {
 	sites, err := siteRepo.GetAllSites()
 	if err != nil {
 		return nil, err
@@ -70,8 +80,8 @@ func createReportRows(siteRepo models.SiteRepository, deviceRepo models.DeviceRe
 	if err != nil {
 		return nil, err
 	}
-
-	rows := []reportRow{{"Сайт", "Модель", "Категория", "Актив, шт", "ЗИП, шт", "% ЗИП", "Описание"}}
+	headers := []any{"Сайт", "Модель", "Категория", "Актив, шт", "ЗИП, шт", "% ЗИП", "Описание"}
+	rows := []row{{headers, false}} //init a first row - headers
 	for _, site := range sites {
 		//make a map of device models -> their count for a particular site
 		deviceMap := createDeviceMap(&site, devices)
@@ -79,9 +89,18 @@ func createReportRows(siteRepo models.SiteRepository, deviceRepo models.DeviceRe
 		//then append a row to rows slice
 		for model, modelCount := range deviceMap {
 			ZIPcount, specs, category := retrieveZIPdevices(&site, model, assets)
-			ZIPcoverage := strconv.FormatFloat(float64(ZIPcount)/float64(modelCount), 'f', -1, 64) + "%"
-			row := []any{site.Facility, model, category, modelCount, ZIPcount, ZIPcoverage, specs}
-			rows = append(rows, row)
+			ZIPcoverage := math.Round(float64(ZIPcount) / float64(modelCount) * 100.0) // * 100 to get percentages, round to make it look nice
+			sphreadsheetRow := []any{
+				site.Facility,
+				model,
+				category,
+				modelCount,
+				ZIPcount,
+				strconv.FormatFloat(ZIPcoverage, 'f', -1, 64) + "%",
+				specs,
+			}
+			hasCriticalZIPcount := ZIPcount >= minimumZIPcount && ZIPcoverage <= criticalZIPCoveragePercentage
+			rows = append(rows, row{sphreadsheetRow, hasCriticalZIPcount})
 		}
 	}
 	return rows, nil
@@ -104,12 +123,20 @@ func CreateReport() error {
 	}()
 	//this is what I call "ЧИСТАЯ АРХИТЕКТУРА"
 	styleAllignRight, err := file.NewStyle(&excelize.Style{
-		Alignment:     &excelize.Alignment{Horizontal: "right", WrapText: true},
-		DecimalPlaces: 2,
+		Alignment: &excelize.Alignment{Horizontal: "right", WrapText: true},
 	})
-	styleAllignLeft, err := file.NewStyle(&excelize.Style{
-		Alignment:     &excelize.Alignment{Horizontal: "left", WrapText: true},
-		DecimalPlaces: 2,
+	/*
+		styleAllignLeft, err := file.NewStyle(&excelize.Style{
+			Alignment: &excelize.Alignment{Horizontal: "left", WrapText: true},
+		})
+	*/
+	styleLowZIPcount, err := file.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{Horizontal: "right", WrapText: true},
+		Fill: excelize.Fill{
+			Type:    "pattern",
+			Color:   []string{"FF0000"},
+			Pattern: 1,
+		},
 	})
 	err = file.SetColWidth("Sheet1", "A", "A", 15) //site
 	err = file.SetColWidth("Sheet1", "B", "B", 20) //model
@@ -118,8 +145,8 @@ func CreateReport() error {
 	err = file.SetColWidth("Sheet1", "E", "E", 10) //ZIP count
 	err = file.SetColWidth("Sheet1", "F", "F", 15) //ZIP coverage
 	err = file.SetColWidth("Sheet1", "G", "G", 20) //specs
-	err = file.SetColStyle("Sheet1", "A:C", styleAllignLeft)
-	err = file.SetColStyle("Sheet1", "D:G", styleAllignRight)
+	err = file.SetColStyle("Sheet1", "A:G", styleAllignRight)
+	//err = file.SetColStyle("Sheet1", "D:G", styleAllignRight)
 	if err != nil {
 		return err
 	}
@@ -129,7 +156,12 @@ func CreateReport() error {
 		if err != nil {
 			return err
 		}
-		file.SetSheetRow("Sheet1", cell, &row)
+		file.SetSheetRow("Sheet1", cell, &row.sphreadsheetRow)
+		if row.hasCritialZIPcount {
+			// I decided to ignore the error, because its just a format, if it fails is is not THAT bad...
+			_ = file.SetCellStyle("Sheet1", "A"+cell[1:], "G"+cell[1:], styleLowZIPcount)
+		}
+
 	}
 	err = file.SetCellFormula("Sheet1", "D13", "=SUM(D2:D10)")
 	if err != nil {
